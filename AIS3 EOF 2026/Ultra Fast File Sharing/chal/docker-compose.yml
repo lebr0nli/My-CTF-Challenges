@@ -1,0 +1,15 @@
+name: eof-misc-ultra-fast-file-sharing
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    init: true
+    read_only: true
+    tmpfs:
+      - /app/uploads:uid=33,gid=33,mode=755
+    restart: unless-stopped
+    ports:
+      - "${PORT:-1337}:8000"

@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Ultra Fast File Sharing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background-color: #f9f9f9;
+    }
+
+    h1,
+    h2,
+    h3 {
+      color: #333;
+      margin-top: 0;
+    }
+
+    a {
+      text-decoration: none;
+      color: #0066cc;
+      font-weight: 500;
+    }
+
+    a:hover {
+      text-decoration: underline;
+      color: #004499;
+    }
+
+    .upload-info {
+      background: #ffffff;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .dropzone {
+      border: 2px dashed #cccccc;
+      border-radius: 5px;
+      padding: 24px;
+      text-align: center;
+      background-color: #f4f4f4;
+      color: #555555;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: #15803d;
+      background-color: #e5f3e9;
+    }
+
+    .dropzone small {
+      display: block;
+      margin-top: 6px;
+      color: #777777;
+    }
+
+    .upload-controls {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .select-button {
+      font-size: 0.85rem;
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: 1px solid #cccccc;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .select-button:hover {
+      border-color: #15803d;
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: #777777;
+    }
+
+    .status {
+      margin-top: 10px;
+      min-height: 1rem;
+      font-size: 0.85rem;
+      color: #555555;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 999px;
+      background: #15803d;
+      margin-right: 4px;
+    }
+
+    .status-dot.error {
+      background: #b91c1c;
+    }
+
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      border-radius: 3px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-size: 0.85rem;
+    }
+
+    .copy-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .copy-button {
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #cccccc;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .copy-button:hover {
+      border-color: #15803d;
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+      background: white;
+      border-radius: 5px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    li {
+      margin: 10px 0;
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    li:last-child {
+      border-bottom: none;
+    }
+
+    .empty {
+      color: #777777;
+      font-style: italic;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Ultra Fast File Sharing</h1>
+  <div class="upload-info">
+    <h3>Upload via browser</h3>
+    <div id="dropzone" class="dropzone">
+      Drop files here to upload
+      <small>Each file is stored as <code>/&lt;filename&gt;</code>.</small>
+    </div>
+    <div class="upload-controls">
+      <button id="select-files-button" class="select-button" type="button">
+        Select files…
+      </button>
+      <span class="hint">On mobile, tap to choose files instead.</span>
+      <input id="file-input" type="file" multiple style="display: none" />
+    </div>
+    <div id="status" class="status"></div>
+
+    <h3>Upload with curl</h3>
+    <div class="copy-row">
+      <pre>curl -T localfile {{ request.base_url }}filename</pre>
+      <button class="copy-button" type="button" data-command="curl -T localfile {{ request.base_url }}filename">
+        Copy
+      </button>
+    </div>
+  </div>
+
+  <h3>Available files</h3>
+  <ul>
+    {% if not files %}
+    <li class="empty">No files uploaded yet.</li>
+    {% else %} {% for filename in files %}
+    <li>
+      <div class="copy-row">
+        <a href="/{{ filename }}">{{ filename }}</a>
+        <button class="copy-button" type="button" data-command="curl {{ request.base_url }}{{ filename }} -O">
+          Copy
+        </button>
+      </div>
+    </li>
+    {% endfor %} {% endif %}
+  </ul>
+
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const statusEl = document.getElementById("status");
+    const selectFilesButton = document.getElementById("select-files-button");
+    const fileInput = document.getElementById("file-input");
+    const copyButtons = document.querySelectorAll(".copy-button");
+
+    ["dragover", "drop"].forEach((eventName) => {
+      window.addEventListener(
+        eventName,
+        (event) => {
+          event.preventDefault();
+        },
+        false
+      );
+    });
+
+    /**
+     * Set a human-readable status message under the upload area.
+     */
+    function setStatus(message, isError = false) {
+      if (!statusEl) return;
+
+      // Clear existing content
+      while (statusEl.firstChild) {
+        statusEl.removeChild(statusEl.firstChild);
+      }
+
+      if (!message) {
+        return;
+      }
+
+      const dot = document.createElement("span");
+      dot.className = isError ? "status-dot error" : "status-dot";
+
+      const text = document.createTextNode(message);
+
+      const wrapper = document.createElement("span");
+      wrapper.appendChild(dot);
+      wrapper.appendChild(text);
+
+      statusEl.appendChild(wrapper);
+    }
+
+    /**
+     * Upload a FileList (from drag-and-drop or file input) using PUT /{filename}.
+     */
+    async function uploadFiles(files) {
+      if (!files || files.length === 0) {
+        setStatus("No files to upload.", true);
+        return;
+      }
+
+      const fileArray = Array.prototype.slice.call(files);
+
+      for (const file of fileArray) {
+        try {
+          setStatus(`Uploading "${file.name}" ...`);
+
+          const response = await fetch(`/${encodeURIComponent(file.name)}`, {
+            method: "PUT",
+            body: file,
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          setStatus(
+            `Uploaded "${file.name}". Reload the page to see it in the list.`
+          );
+        } catch (error) {
+          const message =
+            error && error.message ? error.message : "unknown error";
+          setStatus(
+            `Failed to upload "${file.name}": ${message}`,
+            true
+          );
+        }
+      }
+    }
+
+    if (dropzone) {
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropzone.classList.add("dragover");
+          setStatus("Drop files to upload.");
+        });
+      });
+
+      ["dragleave", "drop"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dropzone.classList.remove("dragover");
+        });
+      });
+
+      dropzone.addEventListener("drop", (event) => {
+        const files = event.dataTransfer ? event.dataTransfer.files : null;
+        uploadFiles(files);
+      });
+    }
+
+    if (selectFilesButton && fileInput) {
+      selectFilesButton.addEventListener("click", () => {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener("change", () => {
+        const files = fileInput.files;
+        uploadFiles(files);
+        fileInput.value = "";
+      });
+    }
+
+    // Attach click handlers to all "Copy" buttons for curl commands.
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const command = button.getAttribute("data-command");
+        if (!command) {
+          return;
+        }
+
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(command);
+          } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = command;
+            textarea.setAttribute("readonly", "");
+            textarea.style.position = "absolute";
+            textarea.style.left = "-9999px";
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+          }
+
+          const original = button.textContent || "Copy";
+          button.textContent = "Copied";
+          setTimeout(() => {
+            button.textContent = original;
+          }, 1500);
+        } catch {
+          const original = button.textContent || "Copy";
+          button.textContent = "Error";
+          setTimeout(() => {
+            button.textContent = original;
+          }, 1500);
+        }
+      });
+    });
+  </script>
+</body>
+
+</html>

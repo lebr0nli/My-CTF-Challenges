@@ -1,0 +1,10 @@
+name: eof-misc-welcome-to-the-django
+
+services:
+    app:
+        build: .
+        ports:
+            - "${PORT:-1337}:1337"
+        restart: unless-stopped
+        environment:
+            - SECRET_KEY=${SECRET_KEY:-D3mmy_S3cr3t_K3y_F0r_T3st1ng}

@@ -1,0 +1,11 @@
+name: eof-web-bun-php
+
+services:
+    app:
+        build:
+            context: .
+        read_only: true
+        ports:
+            - "${PORT:-1337}:1337"
+        init: true
+        restart: unless-stopped
